@@ -10,8 +10,9 @@
 //   3. Motor matemático (tasas, totales, generateOptions)
 //   4. Perks y tienda entre días
 //   5. Storage (bridge platanusArcadeStorage + fallback)
-//   6. Sprites procedurales (Fase 3)
-//   7. Escena principal y game loop
+//   6. Audio procedural (chiptune vía Web Audio)
+//   7. Pixel art procedural (sprites por mapas de píxeles)
+//   8. Escena principal y game loop
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ══ 1. CONSTANTES Y CONFIGURACIÓN ═══════════════════════════════════════════
@@ -27,6 +28,8 @@ const COLORS = {
   bg: 0x14100a,
   wall: 0x2a1f14,
   cardboard: 0xc9a35f,
+  cardboardDark: 0xa5813f,
+  cardboardInk: '#3a2a12',
   counter: 0x6b4a2a,
   counterTop: 0x8a6136,
   panel: 0x0d1b3e,
@@ -129,6 +132,7 @@ function clearStalePresses() {
 /**
  * @typedef {{ id: string, name: string, priceUSD: number }} Product
  * Producto de la bodega. `priceUSD` es el precio de lista en divisas.
+ * El `id` coincide con la textura pixel art generada en la sección 7.
  */
 const PRODUCTS = [
   { id: 'pan', name: 'Harina PAN', priceUSD: 1.25 },
@@ -163,8 +167,18 @@ const PAYMENT_METHODS = [
  */
 
 /**
- * @typedef {{ name: string, items: Product[], method: PaymentMethod, patienceMs: number }} Client
+ * @typedef {{ name: string, look: string, items: Product[], method: PaymentMethod,
+ *   patienceMs: number }} Client
+ * `look` es la clave de textura pixel art del sprite del cliente.
  */
+const CLIENT_LOOKS = ['cli_chamo', 'cli_abuela', 'cli_maria', 'cli_jose', 'cli_motorizado'];
+const CLIENT_NAMES = {
+  cli_chamo: ['Chamo', 'Ender', 'Yonaiker'],
+  cli_abuela: ['Abuela', 'Carmen', 'Petra'],
+  cli_maria: ['Maria', 'Yuleidis', 'Ana'],
+  cli_jose: ['Jose', 'Ramon', 'Luis'],
+  cli_motorizado: ['Motorizado', 'Pedro', 'El Goyo'],
+};
 
 /**
  * @typedef {{ day: number, items: [number, number], patienceMs: number, dolarRange: [number, number],
@@ -272,8 +286,10 @@ function genClient(level) {
     items.push(pool.splice(idx, 1)[0]);
   }
   const methods = PAYMENT_METHODS.filter((m) => m.rateKey !== 'euro' || level.euroEnabled);
+  const look = pick(CLIENT_LOOKS);
   return {
-    name: pick(['Maria', 'Jose', 'Luis', 'Carmen', 'Pedro', 'Ana', 'Chamo', 'Yuleidis', 'Ramon', 'Ender']),
+    name: pick(CLIENT_NAMES[look]),
+    look,
     items,
     method: pick(methods),
     patienceMs: level.patienceMs,
@@ -448,13 +464,13 @@ async function saveData(key, value) {
 
 // ══ 6. AUDIO PROCEDURAL (chiptune via Web Audio de Phaser) ══════════════════
 
-/** Toca un tono cuadrado estilo chiptune en `t0` (segundos del AudioContext). */
-function toneAt(scene, freq, t0, dur, vol) {
+/** Toca un tono estilo chiptune en `t0` (segundos del AudioContext). */
+function toneAt(scene, freq, t0, dur, vol, type) {
   if (!scene.sound || !scene.sound.context) return;
   const ctx = scene.sound.context;
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
-  osc.type = 'square';
+  osc.type = type || 'square';
   osc.frequency.value = freq;
   gain.gain.setValueAtTime(vol, t0);
   gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
@@ -480,9 +496,379 @@ function playBuySound(scene) {
   toneAt(scene, 1600, t0 + 0.08, 0.1, 0.06);
 }
 
-// ══ 7. ESCENA PRINCIPAL Y GAME LOOP ═════════════════════════════════════════
-// (Fases 3–5: sprites pixel art, eventos especiales, audio y high scores.
-//  Por ahora: esqueleto jugable basado en texto que valida el core loop.)
+/** Ding del punto de venta al cobrar bien. */
+function playGoodSound(scene) {
+  if (!scene.sound || !scene.sound.context) return;
+  const t0 = scene.sound.context.currentTime + 0.02;
+  toneAt(scene, 880, t0, 0.09, 0.06);
+  toneAt(scene, 1319, t0 + 0.09, 0.16, 0.06);
+}
+
+/** Buzz grave de error / cliente perdido. */
+function playBadSound(scene) {
+  if (!scene.sound || !scene.sound.context) return;
+  const t0 = scene.sound.context.currentTime + 0.02;
+  toneAt(scene, 160, t0, 0.28, 0.07, 'sawtooth');
+  toneAt(scene, 110, t0 + 0.05, 0.28, 0.05, 'sawtooth');
+}
+
+// ══ 7. PIXEL ART PROCEDURAL ═════════════════════════════════════════════════
+// Cada sprite es un mapa de caracteres: cada letra es un píxel de la paleta
+// (`pal`) y '.' es transparente. Se rasterizan con Graphics → generateTexture.
+// Referencias venezolanas: Harina PAN, malta, queso llanero, motorizado con
+// casco, abuela con rodete, señora con rolos, chamo con gorra tricolor...
+
+const PIXEL_SPRITES = {
+  // ── Productos ──
+  pan: { // Harina PAN: paquete amarillo con óvalo blanco y rojo
+    pal: { P: 0xf7d117, W: 0xffffff, R: 0xcf142b },
+    px: [
+      '.PPPPPPPPPP.',
+      'PPPPPPPPPPPP',
+      'PPWWWWWWWWPP',
+      'PPWRRRRRRWPP',
+      'PPWRRRRRRWPP',
+      'PPWWWWWWWWPP',
+      'PPPPPPPPPPPP',
+      'PPPPPPPPPPPP',
+      'PPPPPPPPPPPP',
+      'PPPPPPPPPPPP',
+      'PPPPPPPPPPPP',
+      '.PPPPPPPPPP.',
+    ],
+  },
+  arroz: { // saco blanco con banda verde
+    pal: { W: 0xf5f5f5, G: 0x2e8b57, S: 0xcfcfcf },
+    px: [
+      '.WWWWWWWWWW.',
+      'WWWWWWWWWWWW',
+      'WWGGGGGGGGWW',
+      'WWGGGGGGGGWW',
+      'WWWWWWWWWWWW',
+      'WWWWWWWWWWWW',
+      'WWWWWWWWWWWW',
+      'WWWWWWWWWWWW',
+      'WWWWWWWWWWWW',
+      'WWWWWWWWWWWW',
+      'SSSSSSSSSSSS',
+      '.SSSSSSSSSS.',
+    ],
+  },
+  pasta: { // paquete largo rojo y azul
+    pal: { R: 0xd0342c, B: 0x2b4a8f, W: 0xffffff },
+    px: [
+      'RRRRRRRRRRRR',
+      'RRWWWWWWWWRR',
+      'RRWWWWWWWWRR',
+      'RRRRRRRRRRRR',
+      'BBBBBBBBBBBB',
+      'BBWWWWWWWWBB',
+      'BBWWWWWWWWBB',
+      'BBBBBBBBBBBB',
+    ],
+  },
+  aceite: { // botella amarilla con tapa verde
+    pal: { C: 0x2e8b57, T: 0xffd24a, O: 0xf0a500, W: 0xffffff },
+    px: [
+      '...CC...',
+      '...CC...',
+      '..TTTT..',
+      '.OTTTTO.',
+      'OTTTTTTO',
+      'OTWWWTT.',
+      'OTWWWTT.',
+      'OTTTTTTO',
+      'OTTTTTTO',
+      'OTTTTTTO',
+      '.OOOOOO.',
+    ],
+  },
+  cafe: { // bolsa marrón con banda oscura
+    pal: { B: 0x6b4226, D: 0x3a2410, W: 0xf5e6c8 },
+    px: [
+      '.BBBBBBBB.',
+      'BBBBBBBBBB',
+      'BDDDDDDDDB',
+      'BDDWWWDDBB'.slice(0, 10),
+      'BDDDDDDDDB',
+      'BBBBBBBBBB',
+      'BBBBBBBBBB',
+      'BBBBBBBBBB',
+      'BBBBBBBBBB',
+      'BBBBBBBBBB',
+      '.BBBBBBBB.',
+    ],
+  },
+  malta: { // botella de malta con etiqueta roja
+    pal: { C: 0xf0e0c8, N: 0x3a2410, B: 0x4a2c12, R: 0xcf142b, W: 0xffffff },
+    px: [
+      '...CC...',
+      '...CC...',
+      '..NNNN..',
+      '.BBBBBB.',
+      'BBBBBBBB',
+      'BRRRRRRB',
+      'BRWRRWRB',
+      'BRRRRRRB',
+      'BBBBBBBB',
+      'BBBBBBBB',
+      '.BBBBBB.',
+    ],
+  },
+  queso: { // rueda de queso llanero con huecos
+    pal: { Q: 0xfff2c8, H: 0xe0c888, S: 0xc8a860 },
+    px: [
+      '..QQQQQQ..',
+      '.QQHQQQQQ.',
+      'QQQQQQQQQQ',
+      'QQQHHQQQQQ',
+      'QQQQQQQQQQ',
+      'QQQQQQHQQQ',
+      'SSSSSSSSSS',
+    ],
+  },
+  papel: { // pack de papel higiénico, dos rollos
+    pal: { W: 0xffffff, S: 0xd8d8d8, C: 0xb89a6a },
+    px: [
+      '.WWWW..WWWW.',
+      'WWWWWWWWWWWW',
+      'WWCWWWWWCWWW',
+      'WWWWWWWWWWWW',
+      'SSSSSSSSSSSS',
+      'WWWWWWWWWWWW',
+      'WWCWWWWWCWWW',
+      'WWWWWWWWWWWW',
+      '.WWWW..WWWW.',
+    ],
+  },
+  leche: { // cartón de leche con tapa azul
+    pal: { W: 0xffffff, B: 0x3a6ea8, T: 0x9ec8e8 },
+    px: [
+      '..TTTT..',
+      '.WWWWWW.',
+      'WWWWWWWW',
+      'WWBBBBWW',
+      'WWBBBBWW',
+      'WWWWWWWW',
+      'WWWWWWWW',
+      'WWWWWWWW',
+      'WWWWWWWW',
+    ],
+  },
+  azucar: { // saco con banda marrón
+    pal: { W: 0xf8f0e0, B: 0x8b5a2b, S: 0xd8cbb0 },
+    px: [
+      '.WWWWWWWW.',
+      'WWWWWWWWWW',
+      'WWBBBBBBWW',
+      'WWBBBBBBWW',
+      'WWWWWWWWWW',
+      'WWWWWWWWWW',
+      'WWWWWWWWWW',
+      'WWWWWWWWWW',
+      'SSSSSSSSSS',
+    ],
+  },
+  atun: { // lata de atún plateada con etiqueta azul
+    pal: { S: 0xc0c0c0, B: 0x2b4a8f, W: 0xffffff },
+    px: [
+      'SSSSSSSSSS',
+      'SSSSSSSSSS',
+      'SBBBBBBBBS',
+      'SBWWWWWWBS',
+      'SBBBBBBBBS',
+      'SSSSSSSSSS',
+      'SSSSSSSSSS',
+    ],
+  },
+  jabon: { // jabón rosa con burbujas
+    pal: { P: 0xf0a0c0, W: 0xffffff, B: 0x80c8f0 },
+    px: [
+      '.B........',
+      '.BB...B...',
+      '.PPPPPPPP.',
+      'PPPPPPPPPP',
+      'PPWWWWWWPP',
+      'PPPPPPPPPP',
+      '.PPPPPPPP.',
+    ],
+  },
+
+  // ── HUD ──
+  heart: {
+    pal: { R: 0xff4a5e },
+    px: [
+      '.RR.RR.',
+      'RRRRRRR',
+      'RRRRRRR',
+      '.RRRRR.',
+      '..RRR..',
+      '...R...',
+    ],
+  },
+  coin: {
+    pal: { G: 0xd4a017, Y: 0xffd24a },
+    px: [
+      '..GGGG..',
+      '.GYYYYG.',
+      'GYGGGGYG',
+      'GYGYYGYG',
+      'GYGYYGYG',
+      'GYGGGGYG',
+      '.GYYYYG.',
+      '..GGGG..',
+    ],
+  },
+
+  // ── Clientes (16x20) ──
+  cli_chamo: { // gorra tricolor
+    pal: { Y: 0xf7d117, B: 0x00247d, R: 0xcf142b, S: 0xc68e5e, E: 0x222222, M: 0x8b3a3a, T: 0x2e8b57, P: 0x2b3a5f, F: 0x333333 },
+    px: [
+      '....YYYYYYYY....',
+      '...BBBBBBBBBB...',
+      '...RRRRRRRRRR...',
+      '..SSSSSSSSSSSS..',
+      '..SSEESSSSEESS..',
+      '..SSSSSSSSSSSS..',
+      '...SSSMMMMSSS...',
+      '....SSSSSSSS....',
+      '....TTTTTTTT....',
+      '...TTTTTTTTTT...',
+      '..TTTTTTTTTTTT..',
+      '..SSTTTTTTTTSS..',
+      '..SSTTTTTTTTSS..',
+      '..SSTTTTTTTTSS..',
+      '....PPPPPPPP....',
+      '....PPP..PPP....',
+      '....PPP..PPP....',
+      '....PPP..PPP....',
+      '....FF....FF....',
+      '...FFF....FFF...',
+    ],
+  },
+  cli_abuela: { // rodete gris y chal morado
+    pal: { H: 0xd8d8d8, S: 0xd9a066, E: 0x222222, M: 0x8b3a3a, T: 0x8a5a9e, P: 0x6a4a7e, F: 0x333333 },
+    px: [
+      '......HHHH......',
+      '.....HHHHHH.....',
+      '....HHHHHHHH....',
+      '..HHSSSSSSSSHH..',
+      '..SSSEESSEESSS..',
+      '..SSSSSSSSSSSS..',
+      '...SSSMMMMSSS...',
+      '....SSSSSSSS....',
+      '....TTTTTTTT....',
+      '...TTTTTTTTTT...',
+      '..TTTTTTTTTTTT..',
+      '..SSTTTTTTTTSS..',
+      '..SSTTTTTTTTSS..',
+      '....TTTTTTTT....',
+      '....TTTTTTTT....',
+      '...TTTTTTTTTT...',
+      '....PPP..PPP....',
+      '....PPP..PPP....',
+      '....FF....FF....',
+      '...FFF....FFF...',
+    ],
+  },
+  cli_maria: { // rolos rosados
+    pal: { R: 0xf070a0, H: 0x3a2410, S: 0x8d5524, E: 0x222222, M: 0xd05a5a, T: 0xe86a10, P: 0x5a3a6e, F: 0x333333 },
+    px: [
+      '....RRRRRRRR....',
+      '...RRHRRHHRRR...',
+      '...HHHHHHHHHH...',
+      '..SSSSSSSSSSSS..',
+      '..SSEESSSSEESS..',
+      '..SSSSSSSSSSSS..',
+      '...SSSMMMMSSS...',
+      '....SSSSSSSS....',
+      '....TTTTTTTT....',
+      '...TTTTTTTTTT...',
+      '..TTTTTTTTTTTT..',
+      '..SSTTTTTTTTSS..',
+      '..SSTTTTTTTTSS..',
+      '..SSTTTTTTTTSS..',
+      '....PPPPPPPP....',
+      '....PPP..PPP....',
+      '....PPP..PPP....',
+      '....PPP..PPP....',
+      '....FF....FF....',
+      '...FFF....FFF...',
+    ],
+  },
+  cli_jose: { // barba y franela azul
+    pal: { H: 0x1a1a1a, S: 0xa06a3a, E: 0xf0f0f0, M: 0x8b3a3a, D: 0x1a1a1a, T: 0x2b4a8f, P: 0x3a3a3a, F: 0x222222 },
+    px: [
+      '....HHHHHHHH....',
+      '...HHHHHHHHHH...',
+      '..HHSSSSSSSSHH..',
+      '..SSEESSSSEESS..',
+      '..SSSSSSSSSSSS..',
+      '..SDDDDDDDDDS...',
+      '...DDMMMMMDDD...',
+      '....DDDDDDDD....',
+      '....TTTTTTTT....',
+      '...TTTTTTTTTT...',
+      '..TTTTTTTTTTTT..',
+      '..SSTTTTTTTTSS..',
+      '..SSTTTTTTTTSS..',
+      '..SSTTTTTTTTSS..',
+      '....PPPPPPPP....',
+      '....PPP..PPP....',
+      '....PPP..PPP....',
+      '....PPP..PPP....',
+      '....FF....FF....',
+      '...FFF....FFF...',
+    ],
+  },
+  cli_motorizado: { // casco rojo con visor
+    pal: { H: 0xcf142b, V: 0x222222, S: 0xc68e5e, E: 0x222222, M: 0x8b3a3a, T: 0xd8d8d8, P: 0x222831, F: 0x111111 },
+    px: [
+      '....HHHHHHHH....',
+      '...HHHHHHHHHH...',
+      '..HHHHHHHHHHHH..',
+      '..HVVVVVVVVVVH..',
+      '..SSSSSSSSSSSS..',
+      '..SSSSSSSSSSSS..',
+      '...SSSMMMMSSS...',
+      '....SSSSSSSS....',
+      '....TTTTTTTT....',
+      '...TTTTTTTTTT...',
+      '..TTTTTTTTTTTT..',
+      '..SSTTTTTTTTSS..',
+      '..SSTTTTTTTTSS..',
+      '..SSTTTTTTTTSS..',
+      '....PPPPPPPP....',
+      '....PPP..PPP....',
+      '....PPP..PPP....',
+      '....PPP..PPP....',
+      '....FF....FF....',
+      '...FFF....FFF...',
+    ],
+  },
+};
+
+/** Rasteriza todos los mapas de píxeles a texturas de Phaser. */
+function makePixelSprites(scene) {
+  for (const [key, def] of Object.entries(PIXEL_SPRITES)) {
+    const g = scene.add.graphics();
+    const rows = def.px;
+    const w = Math.max(...rows.map((r) => r.length));
+    for (let y = 0; y < rows.length; y++) {
+      const row = rows[y];
+      for (let x = 0; x < row.length; x++) {
+        const c = def.pal[row[x]];
+        if (c === undefined) continue;
+        g.fillStyle(c, 1);
+        g.fillRect(x, y, 1, 1);
+      }
+    }
+    g.generateTexture(key, w, rows.length);
+    g.destroy();
+  }
+}
+
+// ══ 8. ESCENA PRINCIPAL Y GAME LOOP ═════════════════════════════════════════
 
 function makeText(scene, x, y, size, color) {
   return scene.add.text(x, y, '', { fontFamily: 'monospace', fontSize: size + 'px', color });
@@ -495,6 +881,7 @@ function boot() {
     height: GAME_HEIGHT,
     parent: 'game-root',
     backgroundColor: '#14100a',
+    pixelArt: true, // escalado NEAREST: píxeles duros
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
     scene: { create, update },
   };
@@ -529,37 +916,72 @@ function create() {
     feedbackMsg: '',
   };
 
-  // Layout base (placeholder visual de la Fase 3).
+  makePixelSprites(scene);
+
+  // ── Zona superior: pared, estantes, cartel de cartón, poster, bandera ──
   scene.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, COLORS.bg);
   scene.add.rectangle(GAME_WIDTH / 2, 130, GAME_WIDTH, 260, COLORS.wall);
-  scene.add.rectangle(GAME_WIDTH / 2, 340, GAME_WIDTH, 160, COLORS.counterTop);
+  // estantes de la bodega (entre el cartel y el cliente)
+  for (const y of [100, 160]) {
+    scene.add.rectangle(415, y, 240, 6, 0x4a3a24);
+  }
+  // cartel de cartón con las tasas (izquierda)
+  scene.add.rectangle(160, 130, 270, 150, COLORS.cardboard)
+    .setStrokeStyle(4, COLORS.cardboardDark);
+  scene.add.rectangle(160, 62, 14, 14, 0x8a8a8a); // tachuela
+  // poster icónico de bodega
+  scene.add.rectangle(712, 40, 130, 44, 0xf5f0e0).setStrokeStyle(3, 0xcf142b);
+  scene.add.text(712, 40, 'NO FIAMOS', {
+    fontFamily: 'monospace', fontSize: '17px', color: '#cf142b',
+  }).setOrigin(0.5);
+  // penón tricolor (bajo el poster)
+  scene.add.rectangle(712, 225, 96, 8, 0xf7d117);
+  scene.add.rectangle(712, 233, 96, 8, 0x00247d);
+  scene.add.rectangle(712, 241, 96, 8, 0xcf142b);
+
+  // ── Zona central: mostrador ──
+  scene.add.rectangle(GAME_WIDTH / 2, 275, GAME_WIDTH, 30, COLORS.counterTop);
+  scene.add.rectangle(GAME_WIDTH / 2, 355, GAME_WIDTH, 130, COLORS.counter);
+
+  // ── Zona inferior: caja registradora + panel del punto de venta ──
   scene.add.rectangle(GAME_WIDTH / 2, 510, GAME_WIDTH, 180, COLORS.panel)
     .setStrokeStyle(4, COLORS.panelEdge);
+  buildRegister(scene);
 
+  // HUD: corazones + monedas + marcador
   scene.ui = {
-    hud: makeText(scene, 20, 12, 16, COLORS.white),
-    perkHud: makeText(scene, 20, 34, 13, COLORS.accent),
-    ratesTitle: makeText(scene, 20, 62, 14, COLORS.accent),
-    rates: makeText(scene, 20, 84, 14, COLORS.white),
-    client: makeText(scene, 330, 62, 14, COLORS.white),
-    items: makeText(scene, 330, 130, 13, COLORS.white),
-    ticket: makeText(scene, 330, 240, 18, COLORS.accent),
-    feedback: makeText(scene, 400, 300, 22, COLORS.good).setOrigin(0.5),
-    patienceBg: scene.add.rectangle(560, 218, 300, 14, 0x333333),
-    patienceBar: scene.add.rectangle(410, 218, 300, 14, COLORS.patience).setOrigin(0, 0.5),
+    hearts: [],
+    coinIcon: scene.add.image(116, 16, 'coin').setScale(2.5),
+    coinText: makeText(scene, 132, 8, 16, COLORS.accent),
+    hud: makeText(scene, 300, 12, 15, COLORS.white),
+    perkHud: makeText(scene, 30, 220, 12, COLORS.accent),
+    ratesTitle: makeText(scene, 45, 78, 13, COLORS.cardboardInk),
+    rates: makeText(scene, 45, 98, 14, COLORS.cardboardInk),
+    patienceBg: scene.add.rectangle(672, 152, 230, 12, 0x333333),
+    patienceBar: scene.add.rectangle(557, 152, 230, 12, COLORS.patience).setOrigin(0, 0.5),
+    ticket: scene.add.rectangle(560, 355, 130, 110, 0xf8f4e8).setStrokeStyle(2, 0x999080),
+    ticketText: makeText(scene, 500, 310, 10, '#333333'),
+    ticketTotal: makeText(scene, 505, 392, 12, '#111111'),
+    bubble: scene.add.rectangle(672, 92, 230, 64, 0xffffff).setStrokeStyle(3, 0x222222),
+    bubbleTail: scene.add.triangle(552, 100, 0, 0, 0, 22, 20, 12, 0xffffff),
+    bubbleText: makeText(scene, 565, 68, 12, '#1a1408'),
+    feedback: makeText(scene, 400, 330, 20, COLORS.good).setOrigin(0.5),
     buttons: [],
   };
+  for (let i = 0; i < MAX_HEARTS; i++) {
+    scene.ui.hearts.push(scene.add.image(20 + i * 26, 16, 'heart').setScale(3));
+  }
   scene.ui.patienceBg.setOrigin(0.5);
 
   for (let i = 0; i < 4; i++) {
     const col = i % 2;
     const row = Math.floor(i / 2);
-    const x = 480 + col * 270;
-    const y = 460 + row * 90;
-    const rect = scene.add.rectangle(x, y, 250, 74, COLORS.button)
+    const x = 500 + col * 230;
+    const y = 470 + row * 80;
+    const rect = scene.add.rectangle(x, y, 210, 64, COLORS.button)
       .setStrokeStyle(3, COLORS.panelEdge)
       .setInteractive({ useHandCursor: true });
-    const label = makeText(scene, x, y, 15, COLORS.white).setOrigin(0.5);
+    const label = makeText(scene, x, y, 13, COLORS.white).setOrigin(0.5);
     rect.on('pointerdown', () => selectOption(scene, i));
     scene.ui.buttons.push({ rect, label });
   }
@@ -604,11 +1026,15 @@ function create() {
   scene.ui.shop.nextRect.on('pointerdown', () => {
     if (scene.state.phase === 'shop') advanceDay(scene);
   });
+  scene.ui.shop.next.setInteractive({ useHandCursor: true });
   scene.ui.shop.next.on('pointerdown', () => {
     if (scene.state.phase === 'shop') advanceDay(scene);
   });
-  scene.ui.shop.next.setInteractive({ useHandCursor: true });
   setShopVisible(scene, false);
+
+  // Sprites dinámicos del cliente y sus productos.
+  scene.clientSprite = null;
+  scene.productSprites = [];
 
   // Hook de depuración solo en desarrollo local (tests automatizados).
   if (typeof location !== 'undefined' && location.hostname === 'localhost') {
@@ -616,6 +1042,21 @@ function create() {
   }
 
   showStartScreen(scene);
+}
+
+/** Caja registradora pixelada (decorativa, zona inferior izquierda). */
+function buildRegister(scene) {
+  scene.add.rectangle(130, 500, 180, 110, 0x4a4a52).setStrokeStyle(3, 0x2a2a30);
+  scene.add.rectangle(130, 452, 120, 30, 0x2a2a30); // visor
+  scene.add.text(130, 452, 'BODEGA', {
+    fontFamily: 'monospace', fontSize: '14px', color: '#7dff6a',
+  }).setOrigin(0.5);
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 4; c++) {
+      scene.add.rectangle(70 + c * 40, 490 + r * 26, 30, 18, 0x8a8a92);
+    }
+  }
+  scene.add.rectangle(130, 566, 160, 12, 0x333338); // gaveta
 }
 
 function setShopVisible(scene, visible) {
@@ -639,15 +1080,37 @@ function setPlayUiVisible(scene, visible) {
   }
 }
 
+/** Destruye los sprites del cliente y sus productos (al cambiar de cliente/fase). */
+/** Muestra/oculta la burbuja de diálogo y el ticket (fuera de play/feedback). */
+function setClientUiVisible(scene, visible) {
+  scene.ui.bubble.setVisible(visible);
+  scene.ui.bubbleTail.setVisible(visible);
+  scene.ui.bubbleText.setVisible(visible);
+  scene.ui.ticket.setVisible(visible);
+  scene.ui.ticketText.setVisible(visible);
+  scene.ui.ticketTotal.setVisible(visible);
+}
+
+function clearClientVisuals(scene) {
+  if (scene.clientSprite) {
+    scene.clientSprite.destroy();
+    scene.clientSprite = null;
+  }
+  for (const spr of scene.productSprites) spr.destroy();
+  scene.productSprites = [];
+}
+
 function showStartScreen(scene) {
   scene.state.phase = 'start';
   setShopVisible(scene, false);
   setPlayUiVisible(scene, false);
+  clearClientVisuals(scene);
+  setClientUiVisible(scene, false);
   scene.ui.center.setVisible(true);
   scene.ui.center.setText(
     'A CUANTO EL DOLAR!\n(Bodega Tycoon)\n\n' +
     'Cobra en Bs. segun el metodo de pago.\n' +
-    'Revisa la pizarra de tasas del dia.\n\n' +
+    'Revisa el cartel de tasas del dia.\n\n' +
     'Joystick: elegir boton   P1_1: cobrar\n' +
     'P1_2: usar pista (si tienes)\n\n' +
     '[ START1 o CLIC para abrir la bodega ]'
@@ -690,6 +1153,22 @@ function nextClient(scene) {
   s.sel = 0;
   s.patienceLeft = s.client.patienceMs;
   s.phase = 'play';
+
+  // El cliente entra caminando desde la derecha.
+  clearClientVisuals(scene);
+  scene.clientSprite = scene.add.image(880, 262, s.client.look)
+    .setScale(3.2).setOrigin(0.5, 1);
+  scene.tweens.add({
+    targets: scene.clientSprite, x: 470, duration: 450, ease: 'Quad.easeOut',
+  });
+  // Los productos caen al mostrador uno a uno.
+  s.client.items.forEach((p, i) => {
+    const spr = scene.add.image(100 + i * 72, 200, p.id).setScale(4).setOrigin(0.5, 1);
+    scene.tweens.add({
+      targets: spr, y: 288, duration: 220, delay: 250 + i * 150, ease: 'Bounce.easeOut',
+    });
+    scene.productSprites.push(spr);
+  });
   refreshUi(scene);
 }
 
@@ -697,11 +1176,9 @@ function openShop(scene) {
   const s = scene.state;
   s.phase = 'shop';
   s.shopSel = 0;
+  clearClientVisuals(scene);
   scene.ui.center.setVisible(false);
-  scene.ui.client.setText('');
-  scene.ui.items.setText('');
-  scene.ui.ticket.setText('');
-  scene.ui.feedback.setText('');
+  setClientUiVisible(scene, false);
   setPlayUiVisible(scene, false);
   setShopVisible(scene, true);
   playDayJingle(scene);
@@ -777,11 +1254,13 @@ function selectOption(scene, i) {
     s.feedbackOk = true;
     s.feedbackMsg = 'COBRADO! +$' + earned;
     s.served += 1;
+    playGoodSound(scene);
   } else {
     s.streak = 0;
     s.hearts -= 1;
     s.feedbackOk = false;
     s.feedbackMsg = 'ERA Bs. ' + fmtBs(s.options[s.correctIndex]);
+    playBadSound(scene);
   }
   s.phase = 'feedback';
   s.feedbackUntil = 1500;
@@ -794,6 +1273,7 @@ function onPatienceOut(scene) {
   s.hearts -= 1;
   s.feedbackOk = false;
   s.feedbackMsg = 'SE FUE! ERA Bs. ' + fmtBs(s.options[s.correctIndex]);
+  playBadSound(scene);
   s.phase = 'feedback';
   s.feedbackUntil = 1500;
   refreshUi(scene);
@@ -801,14 +1281,16 @@ function onPatienceOut(scene) {
 
 function refreshUi(scene) {
   const s = scene.state;
-  scene.ui.hud.setText(
-    'DIA ' + s.day + '  [' + '<3'.repeat(s.hearts) + ']  $' + s.coins +
-    '  Pts ' + s.score + '  Racha x' + s.streak
-  );
+  // HUD: corazones pixelados, monedas y marcador.
+  for (let i = 0; i < MAX_HEARTS; i++) {
+    scene.ui.hearts[i].setTint(i < s.hearts ? 0xffffff : 0x333333);
+  }
+  scene.ui.coinText.setText('$' + s.coins);
+  scene.ui.hud.setText('DIA ' + s.day + '   Pts ' + s.score + '   Racha x' + s.streak);
   const calcLabel = s.perks.calcLevel > 0
     ? 'CALC ' + Math.round(CALC_PROBS[s.perks.calcLevel] * 100) + '%'
     : 'sin calc';
-  scene.ui.perkHud.setText('PISTAS:' + s.perks.hints + ' (P1_2)   ' + calcLabel);
+  scene.ui.perkHud.setText('PISTAS:' + s.perks.hints + ' (P1_2)  ' + calcLabel);
   if (s.rates) {
     scene.ui.ratesTitle.setText('TASAS DEL DIA (Bs/$)');
     const lines = ['DOLAR  ' + fmtBs(s.rates.dolar)];
@@ -816,14 +1298,15 @@ function refreshUi(scene) {
     scene.ui.rates.setText(lines.join('\n'));
   }
   if (s.client && (s.phase === 'play' || s.phase === 'feedback')) {
-    scene.ui.client.setText(
-      s.client.name + ': "Me cobras por\n' + s.client.method.label + '"' +
-      (s.level.igtfEnabled && s.client.method.igtf ? '  (+IGTF 3%)' : '')
+    setClientUiVisible(scene, true);
+    scene.ui.bubbleText.setText(
+      s.client.name + ':\n"' + s.client.method.label + '"' +
+      (s.level.igtfEnabled && s.client.method.igtf ? ' (+IGTF)' : '')
     );
-    scene.ui.items.setText(
-      s.client.items.map((p) => p.name + '  $' + p.priceUSD.toFixed(2)).join('\n')
+    scene.ui.ticketText.setText(
+      s.client.items.map((p) => p.name + ' $' + p.priceUSD.toFixed(2)).join('\n')
     );
-    scene.ui.ticket.setText('TOTAL: $' + s.totalUSD.toFixed(2));
+    scene.ui.ticketTotal.setText('TOTAL $' + s.totalUSD.toFixed(2));
     for (let i = 0; i < 4; i++) {
       const btn = scene.ui.buttons[i];
       if (s.eliminated[i]) {
@@ -832,7 +1315,7 @@ function refreshUi(scene) {
         btn.rect.fillColor = COLORS.buttonOff;
       } else {
         let text = 'Bs. ' + fmtBs(s.options[i]);
-        if (s.calcRevealed && i === s.correctIndex) text += '  <=CALC';
+        if (s.calcRevealed && i === s.correctIndex) text += ' <=CALC';
         btn.label.setText(text);
         btn.label.setColor(s.calcRevealed && i === s.correctIndex ? COLORS.good : COLORS.white);
         btn.rect.fillColor = COLORS.button;
@@ -858,6 +1341,8 @@ function updateGame(scene, s, delta) {
 
   if (s.phase === 'gameover') {
     setPlayUiVisible(scene, false);
+    setClientUiVisible(scene, false);
+    clearClientVisuals(scene);
     scene.ui.center.setVisible(true);
     scene.ui.center.setText(
       'CERRO LA BODEGA\n\nLlegaste al dia ' + s.day +
