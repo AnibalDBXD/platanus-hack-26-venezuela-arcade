@@ -1,5 +1,5 @@
 {
-  "game_name": "Platanus Hack: Caracas Brick Breaker",
-  "description": "Batalla campal por romper la mayor cantidad de ladrillos",
-  "player_mode": "two_player"
+  "game_name": "A cuanto el dolar! (Bodega Tycoon)",
+  "description": "Atiende tu bodega: convierte divisas a Bolivares segun la tasa del dia y cobra en el punto de venta antes de que el cliente se enoje.",
+  "player_mode": "single_player"
 }
