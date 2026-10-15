@@ -446,6 +446,40 @@ async function saveData(key, value) {
   return getStorage().set(key, value);
 }
 
+// ══ 6. AUDIO PROCEDURAL (chiptune via Web Audio de Phaser) ══════════════════
+
+/** Toca un tono cuadrado estilo chiptune en `t0` (segundos del AudioContext). */
+function toneAt(scene, freq, t0, dur, vol) {
+  if (!scene.sound || !scene.sound.context) return;
+  const ctx = scene.sound.context;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'square';
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(vol, t0);
+  gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(t0);
+  osc.stop(t0 + dur);
+}
+
+/** Jingle de victoria al completar el día (arpegio chiptune). */
+function playDayJingle(scene) {
+  if (!scene.sound || !scene.sound.context) return;
+  const t0 = scene.sound.context.currentTime + 0.05;
+  const notes = [523, 659, 784, 1047, 784, 1047, 1319]; // C5 E5 G5 C6 G5 C6 E6
+  notes.forEach((f, i) => toneAt(scene, f, t0 + i * 0.11, 0.16, 0.05));
+}
+
+/** Blip de caja registradora al comprar en la tienda. */
+function playBuySound(scene) {
+  if (!scene.sound || !scene.sound.context) return;
+  const t0 = scene.sound.context.currentTime + 0.02;
+  toneAt(scene, 1200, t0, 0.07, 0.06);
+  toneAt(scene, 1600, t0 + 0.08, 0.1, 0.06);
+}
+
 // ══ 7. ESCENA PRINCIPAL Y GAME LOOP ═════════════════════════════════════════
 // (Fases 3–5: sprites pixel art, eventos especiales, audio y high scores.
 //  Por ahora: esqueleto jugable basado en texto que valida el core loop.)
@@ -489,6 +523,7 @@ function create() {
     sel: 0,
     shopSel: 0,
     patienceLeft: 0,
+    dayCoins: 0, // monedas ganadas en el día (para el resumen del cierre)
     feedbackUntil: 0,
     feedbackOk: false,
     feedbackMsg: '',
@@ -540,40 +575,57 @@ function create() {
     }
   });
 
-  // Tienda entre días: filas clickables (mouse/touch) además del joystick.
+  // Tienda entre días: celebración + filas clickables + botón grande CONTINUAR.
   scene.ui.shop = {
-    title: makeText(scene, 400, 110, 22, COLORS.accent).setOrigin(0.5),
-    coins: makeText(scene, 400, 150, 16, COLORS.white).setOrigin(0.5),
+    bg: scene.add.rectangle(400, 310, 780, 540, 0x000000, 0.88)
+      .setStrokeStyle(4, COLORS.panelEdge),
+    title: makeText(scene, 400, 90, 26, COLORS.accent).setOrigin(0.5),
+    congrats: makeText(scene, 400, 128, 15, COLORS.good).setOrigin(0.5),
+    stats: makeText(scene, 400, 160, 15, COLORS.white).setOrigin(0.5),
     rows: [],
-    help: makeText(scene, 400, 420, 13, COLORS.dim).setOrigin(0.5).setAlign('center'),
-    next: makeText(scene, 400, 480, 17, COLORS.accent).setOrigin(0.5)
+    help: makeText(scene, 400, 415, 13, COLORS.dim).setOrigin(0.5).setAlign('center'),
+    nextRect: scene.add.rectangle(400, 490, 320, 60, COLORS.button)
+      .setStrokeStyle(4, COLORS.buttonHot)
       .setInteractive({ useHandCursor: true }),
+    next: makeText(scene, 400, 490, 19, COLORS.accent).setOrigin(0.5),
   };
   for (let i = 0; i < 3; i++) {
-    const row = makeText(scene, 400, 225 + i * 55, 16, COLORS.white)
+    const row = makeText(scene, 400, 235 + i * 55, 16, COLORS.white)
       .setOrigin(0.5).setInteractive({ useHandCursor: true });
     row.on('pointerdown', () => {
       const s = scene.state;
       if (s.phase !== 'shop') return;
       s.shopSel = i;
-      buyShopItem(s, getShopItems(s.perks, s.hearts)[i]);
+      if (buyShopItem(s, getShopItems(s.perks, s.hearts)[i])) playBuySound(scene);
       renderShop(scene);
     });
     scene.ui.shop.rows.push(row);
   }
+  scene.ui.shop.nextRect.on('pointerdown', () => {
+    if (scene.state.phase === 'shop') advanceDay(scene);
+  });
   scene.ui.shop.next.on('pointerdown', () => {
     if (scene.state.phase === 'shop') advanceDay(scene);
   });
+  scene.ui.shop.next.setInteractive({ useHandCursor: true });
   setShopVisible(scene, false);
+
+  // Hook de depuración solo en desarrollo local (tests automatizados).
+  if (typeof location !== 'undefined' && location.hostname === 'localhost') {
+    window.__BODEGA_DEBUG = scene.state;
+  }
 
   showStartScreen(scene);
 }
 
 function setShopVisible(scene, visible) {
   const shop = scene.ui.shop;
+  shop.bg.setVisible(visible);
   shop.title.setVisible(visible);
-  shop.coins.setVisible(visible);
+  shop.congrats.setVisible(visible);
+  shop.stats.setVisible(visible);
   shop.help.setVisible(visible);
+  shop.nextRect.setVisible(visible);
   shop.next.setVisible(visible);
   for (const row of shop.rows) row.setVisible(visible);
 }
@@ -610,6 +662,7 @@ function startGame(scene) {
   s.streak = 0;
   s.score = 0;
   s.served = 0;
+  s.dayCoins = 0;
   s.perks = { hints: 0, calcLevel: 0 };
   s.level = getLevel(1);
   s.rates = genRates(s.level);
@@ -645,16 +698,31 @@ function openShop(scene) {
   s.phase = 'shop';
   s.shopSel = 0;
   scene.ui.center.setVisible(false);
+  scene.ui.client.setText('');
+  scene.ui.items.setText('');
+  scene.ui.ticket.setText('');
+  scene.ui.feedback.setText('');
   setPlayUiVisible(scene, false);
   setShopVisible(scene, true);
+  playDayJingle(scene);
+  scene.ui.shop.congrats.setText(pick([
+    'La bodega sobrevive otro dia!',
+    'Otro dia, otro dolar!',
+    'El bodeguero no se rinde!',
+    'Ni la inflacion te para!',
+  ]));
   renderShop(scene);
 }
 
 function renderShop(scene) {
   const s = scene.state;
   const items = getShopItems(s.perks, s.hearts);
-  scene.ui.shop.title.setText('CIERRE DEL DIA ' + s.day);
-  scene.ui.shop.coins.setText('Monedas: $' + s.coins);
+  scene.ui.shop.title.setText('DIA ' + s.day + ' COMPLETADO!');
+  scene.ui.shop.stats.setText(
+    'Clientes atendidos: ' + s.level.clients +
+    '   Ganado hoy: +$' + s.dayCoins +
+    '   Monedas: $' + s.coins
+  );
   items.forEach((item, i) => {
     const row = scene.ui.shop.rows[i];
     const mark = i === s.shopSel ? '> ' : '   ';
@@ -665,13 +733,14 @@ function renderShop(scene) {
     row.setColor(item.disabled || s.coins < item.price ? COLORS.dim : COLORS.white);
   });
   scene.ui.shop.help.setText('Joystick: elegir   P1_1: comprar   (o clic en la fila)');
-  scene.ui.shop.next.setText('[ START1 o CLIC: abrir dia ' + (s.day + 1) + ' ]');
+  scene.ui.shop.next.setText('CONTINUAR AL DIA ' + (s.day + 1));
 }
 
 function advanceDay(scene) {
   const s = scene.state;
   s.day += 1;
   s.served = 0;
+  s.dayCoins = 0;
   s.level = getLevel(s.day);
   s.rates = genRates(s.level);
   scene.ui.center.setVisible(false);
@@ -703,6 +772,7 @@ function selectOption(scene, i) {
     s.streak += 1;
     const earned = 5 + s.client.items.length * 2 + Math.min(5, s.streak);
     s.coins += earned;
+    s.dayCoins += earned;
     s.score += 100 + s.streak * 25 + Math.round(s.patienceLeft / 500);
     s.feedbackOk = true;
     s.feedbackMsg = 'COBRADO! +$' + earned;
@@ -806,9 +876,9 @@ function updateGame(scene, s, delta) {
     if (consumePressed('P1_U')) s.shopSel = (s.shopSel + items.length - 1) % items.length;
     if (consumePressed('P1_D')) s.shopSel = (s.shopSel + 1) % items.length;
     if (consumePressed('P1_1')) {
-      buyShopItem(s, items[s.shopSel]);
+      if (buyShopItem(s, items[s.shopSel])) playBuySound(scene);
     }
-    if (consumePressed('START1')) {
+    if (consumePressed('START1') || consumePressed('P1_3')) {
       advanceDay(scene);
       return;
     }
