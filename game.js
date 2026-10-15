@@ -24,26 +24,30 @@ const MAX_HIGH_SCORES = 5;
 const MAX_HEARTS = 3;
 const IGTF_RATE = 0.03;
 
+// Paleta global "Neon Arcade" (skill retro-tech-illustration): fondos
+// azul-negro/púrpura, acentos neón rosa/cian/púrpura/amarillo, texto off-white.
 const COLORS = {
-  bg: 0x14100a,
-  wall: 0x2a1f14,
-  cardboard: 0xc9a35f,
+  bg: 0x0b0b0f, // deep blue-black
+  wall: 0x1a0f2e, // dark purple
+  shelf: 0x3a2452,
+  cardboard: 0xc9a35f, // el cartón sigue siendo cartón (diegético)
   cardboardDark: 0xa5813f,
   cardboardInk: '#3a2a12',
-  counter: 0x6b4a2a,
-  counterTop: 0x8a6136,
-  panel: 0x0d1b3e,
-  panelEdge: 0x2b4a8f,
-  button: 0x1c3a7a,
-  buttonOff: 0x22262e,
-  buttonHot: 0xe1ff00,
-  white: '#f7ffd8',
+  counter: 0x2e1a34,
+  counterTop: 0x4a2a52,
+  counterTrim: 0x00f5ff, // filo neón cian del mostrador
+  panel: 0x0b0b0f,
+  panelEdge: 0x7b2cff, // neón púrpura
+  button: 0x1a0f2e,
+  buttonOff: 0x16121e,
+  buttonHot: 0xffe600, // amarillo neón
+  white: '#e7e7ff', // off-white
   ink: '#1a1408',
-  accent: '#e1ff00',
-  good: '#7dff6a',
-  bad: '#ff6a5e',
-  dim: '#8a8a7a',
-  patience: 0xe1ff00,
+  accent: '#ffe600',
+  good: '#00ff88',
+  bad: '#ff003c',
+  dim: '#8a86a8',
+  patience: 0x00f5ff,
 };
 
 // DO NOT replace existing keys — they match the physical arcade cabinet wiring.
@@ -525,7 +529,7 @@ function playBadSound(scene) {
 //   M = midtone, S = sombra (hue frío/oscuro, abajo-derecha). Nada de pillow shading.
 // - Bordes duros 1-bit, sin anti-aliasing. Silueta primero, detalle después.
 // - Escalas enteras en pantalla: productos x4, clientes x3, corazón x3, moneda x2.
-const OUTLINE = 0x241628;
+const OUTLINE = 0x160a24;
 
 const PIXEL_SPRITES = {
   // ── Productos (canvas 16x16 salvo indicado) ──
@@ -572,7 +576,7 @@ const PIXEL_SPRITES = {
     ],
   },
   pasta: { // paquete largo rojo/azul con ventana (16x10)
-    pal: { K: OUTLINE, H: 0xe85a4a, R: 0xd0342c, r: 0xa82420, B: 0x2b4a8f, b: 0x1e3462, W: 0xfff3d8 },
+    pal: { K: OUTLINE, H: 0xe85a4a, R: 0xd0342c, r: 0xa82420, B: 0x7b2cff, b: 0x5520b0, W: 0xfff3d8 },
     px: [
       '.KKKKKKKKKKKKKK.',
       'KHHHHHHHHHHHHrrK',
@@ -663,7 +667,7 @@ const PIXEL_SPRITES = {
     ],
   },
   papel: { // pack de papel: 2x2 rollos con núcleo (15x14)
-    pal: { K: OUTLINE, H: 0xffffff, M: 0xf0f0ea, S: 0xc8c8bc, C: 0xb89a6a },
+    pal: { K: OUTLINE, H: 0xffffff, M: 0xeeeeff, S: 0xbcbccf, C: 0xb89a6a },
     px: [
       '.KKKKKK..KKKKKK',
       'KHHHHHHKKHHHHHK',
@@ -681,7 +685,7 @@ const PIXEL_SPRITES = {
     ],
   },
   leche: { // cartón de leche con tapa y banda azul (12x15)
-    pal: { K: OUTLINE, T: 0x9ec8e8, H: 0xffffff, M: 0xf0f4f8, S: 0xbcc8d0, B: 0x3a6ea8 },
+    pal: { K: OUTLINE, T: 0x00f5ff, H: 0xffffff, M: 0xf0f4f8, S: 0xb0b8d0, B: 0x7b2cff },
     px: [
       '...KKKKKK...',
       '...KTTTTK...',
@@ -718,7 +722,7 @@ const PIXEL_SPRITES = {
     ],
   },
   atun: { // lata de atún plateada, etiqueta azul (14x10)
-    pal: { K: OUTLINE, H: 0xeeeeee, M: 0xc0c0c0, S: 0x8a8a8a, B: 0x2b4a8f, W: 0xffffff },
+    pal: { K: OUTLINE, H: 0xf0f0ff, M: 0xb8b8d0, S: 0x7a7a9a, B: 0x7b2cff, W: 0xffffff },
     px: [
       '.KKKKKKKKKKKK.',
       'KHHHHHHHHHHSSK',
@@ -733,7 +737,7 @@ const PIXEL_SPRITES = {
     ],
   },
   jabon: { // jabón rosa con espuma y burbujas (14x12)
-    pal: { K: OUTLINE, B: 0xa8dcf0, H: 0xffc8dc, M: 0xf0a0c0, S: 0xcc7a98, W: 0xffffff },
+    pal: { K: OUTLINE, B: 0x00f5ff, H: 0xff9ac8, M: 0xff2aa3, S: 0xb01870, W: 0xffffff },
     px: [
       '.KB.........',
       'KBKB....KB..',
@@ -751,7 +755,7 @@ const PIXEL_SPRITES = {
 
   // ── HUD ──
   heart: { // 10x8 con outline y brillo
-    pal: { K: OUTLINE, H: 0xff8a9a, R: 0xff4a5e, S: 0xc02840 },
+    pal: { K: OUTLINE, H: 0xff8ac8, R: 0xff2aa3, S: 0xb01870 },
     px: [
       '.KKK...KKK.',
       'KHHHKKKRRRK',
@@ -779,7 +783,7 @@ const PIXEL_SPRITES = {
 
   // ── Clientes (16x20, chibi: cabeza 40%, outline K, luz TL) ──
   cli_chamo: { // gorra tricolor, franela verde
-    pal: { K: OUTLINE, Y: 0xf7d117, B: 0x00247d, R: 0xcf142b, S: 0xc68e5e, s: 0x9e6a40, M: 0x7a3a2a, T: 0x2e8b57, D: 0x1f6a42, P: 0x2b3a5f, F: 0x333333 },
+    pal: { K: OUTLINE, Y: 0xf7d117, B: 0x00247d, R: 0xcf142b, S: 0xc68e5e, s: 0x9e6a40, M: 0x7a3a2a, T: 0x00d2a8, D: 0x009a78, P: 0x2b3a5f, F: 0x1a1424 },
     px: [
       '.....KKKKKK.....',
       '....KYYYYYYK....',
@@ -804,7 +808,7 @@ const PIXEL_SPRITES = {
     ],
   },
   cli_abuela: { // rodete gris, vestido morado
-    pal: { K: OUTLINE, H: 0xe8e8e8, h: 0xbababa, S: 0xd9a066, s: 0xb87f4a, M: 0x8b3a3a, T: 0x8a5a9e, D: 0x6a4078, F: 0x333333 },
+    pal: { K: OUTLINE, H: 0xe8e8e8, h: 0xbababa, S: 0xd9a066, s: 0xb87f4a, M: 0x8b3a3a, T: 0x8a5a9e, D: 0x6a4078, F: 0x1a1424 },
     px: [
       '......KKKK......',
       '.....KHHHHK.....',
@@ -829,7 +833,7 @@ const PIXEL_SPRITES = {
     ],
   },
   cli_maria: { // rolos rosados, franela naranja
-    pal: { K: OUTLINE, R: 0xf070a0, H: 0x3a2410, S: 0x8d5524, s: 0x6e3f1a, M: 0xd05a5a, T: 0xe86a10, D: 0xb85008, P: 0x5a3a6e, F: 0x333333 },
+    pal: { K: OUTLINE, R: 0xf070a0, H: 0x3a2410, S: 0x8d5524, s: 0x6e3f1a, M: 0xd05a5a, T: 0xff7a00, D: 0xc85e00, P: 0x5a3a6e, F: 0x1a1424 },
     px: [
       '....KKKKKKKK....',
       '...KRRRRRRRRK...',
@@ -854,7 +858,7 @@ const PIXEL_SPRITES = {
     ],
   },
   cli_jose: { // barba negra, franela azul
-    pal: { K: OUTLINE, H: 0x1a1a1a, S: 0xa06a3a, s: 0x7f5028, B: 0x2a1a10, M: 0xe8c8a8, T: 0x2b4a8f, D: 0x1e3462, P: 0x3a3a3a, F: 0x222222 },
+    pal: { K: OUTLINE, H: 0x1a1a1a, S: 0xa06a3a, s: 0x7f5028, B: 0x2a1a10, M: 0xe8c8a8, T: 0x00a8d8, D: 0x00789e, P: 0x3a3450, F: 0x1a1424 },
     px: [
       '....KKKKKKKK....',
       '...KHHHHHHHHK...',
@@ -879,7 +883,7 @@ const PIXEL_SPRITES = {
     ],
   },
   cli_motorizado: { // casco rojo con visor, chaqueta gris
-    pal: { K: OUTLINE, H: 0xe8304a, R: 0xcf142b, r: 0x9e0e20, V: 0x2a3542, S: 0xc68e5e, s: 0x9e6a40, M: 0x7a3a2a, T: 0xb8b8c0, D: 0x8a8a92, P: 0x222831, F: 0x111111 },
+    pal: { K: OUTLINE, H: 0xe8304a, R: 0xcf142b, r: 0x9e0e20, V: 0x2a3542, S: 0xc68e5e, s: 0x9e6a40, M: 0x7a3a2a, T: 0x9a7ae8, D: 0x6a4ab0, P: 0x2a2038, F: 0x160a24 },
     px: [
       '....KKKKKKKK....',
       '...KHHHHHHHHK...',
@@ -902,6 +906,12 @@ const PIXEL_SPRITES = {
       '....KPPKKPPK....',
       '...KFFK..KFFK...',
     ],
+  },
+
+  // ── Textura CRT: línea de escaneo 1x2 (tileado a pantalla completa) ──
+  scan: {
+    pal: { K: 0x000000 },
+    px: ['.', 'K'],
   },
 };
 
@@ -937,7 +947,7 @@ function boot() {
     width: GAME_WIDTH,
     height: GAME_HEIGHT,
     parent: 'game-root',
-    backgroundColor: '#14100a',
+    backgroundColor: '#0b0b0f',
     pixelArt: true, // escalado NEAREST: píxeles duros
     render: { antialias: false, roundPixels: true },
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, autoRound: true },
@@ -981,7 +991,7 @@ function create() {
   scene.add.rectangle(GAME_WIDTH / 2, 130, GAME_WIDTH, 260, COLORS.wall);
   // estantes de la bodega (entre el cartel y el cliente)
   for (const y of [100, 160]) {
-    scene.add.rectangle(415, y, 240, 6, 0x4a3a24);
+    scene.add.rectangle(415, y, 240, 6, COLORS.shelf);
   }
   // cartel de cartón con las tasas (izquierda)
   scene.add.rectangle(160, 130, 270, 150, COLORS.cardboard)
@@ -997,8 +1007,9 @@ function create() {
   scene.add.rectangle(712, 233, 96, 8, 0x00247d);
   scene.add.rectangle(712, 241, 96, 8, 0xcf142b);
 
-  // ── Zona central: mostrador ──
+  // ── Zona central: mostrador con filo neón cian (arcade) ──
   scene.add.rectangle(GAME_WIDTH / 2, 275, GAME_WIDTH, 30, COLORS.counterTop);
+  scene.add.rectangle(GAME_WIDTH / 2, 262, GAME_WIDTH, 4, COLORS.counterTrim);
   scene.add.rectangle(GAME_WIDTH / 2, 355, GAME_WIDTH, 130, COLORS.counter);
 
   // ── Zona inferior: caja registradora + panel del punto de venta ──
@@ -1015,7 +1026,7 @@ function create() {
     perkHud: makeText(scene, 30, 220, 12, COLORS.accent),
     ratesTitle: makeText(scene, 45, 78, 13, COLORS.cardboardInk),
     rates: makeText(scene, 45, 98, 14, COLORS.cardboardInk),
-    patienceBg: scene.add.rectangle(672, 152, 230, 12, 0x333333),
+    patienceBg: scene.add.rectangle(672, 152, 230, 12, 0x241a34),
     patienceBar: scene.add.rectangle(557, 152, 230, 12, COLORS.patience).setOrigin(0, 0.5),
     ticket: scene.add.rectangle(560, 355, 130, 110, 0xf8f4e8).setStrokeStyle(2, 0x999080),
     ticketText: makeText(scene, 500, 310, 10, '#333333'),
@@ -1094,6 +1105,11 @@ function create() {
   scene.clientSprite = null;
   scene.productSprites = [];
 
+  // Overlay CRT: scanlines sutiles sobre toda la pantalla (retro-tech).
+  scene.add.tileSprite(400, 300, GAME_WIDTH, GAME_HEIGHT, 'scan')
+    .setAlpha(0.09)
+    .setDepth(1000);
+
   // Hook de depuración solo en desarrollo local (tests automatizados).
   if (typeof location !== 'undefined' && location.hostname === 'localhost') {
     window.__BODEGA_DEBUG = scene.state;
@@ -1104,17 +1120,17 @@ function create() {
 
 /** Caja registradora pixelada (decorativa, zona inferior izquierda). */
 function buildRegister(scene) {
-  scene.add.rectangle(130, 500, 180, 110, 0x4a4a52).setStrokeStyle(3, 0x2a2a30);
-  scene.add.rectangle(130, 452, 120, 30, 0x2a2a30); // visor
+  scene.add.rectangle(130, 500, 180, 110, 0x241a34).setStrokeStyle(3, 0x7b2cff);
+  scene.add.rectangle(130, 452, 120, 30, 0x0b0b0f); // visor
   scene.add.text(130, 452, 'BODEGA', {
-    fontFamily: 'monospace', fontSize: '14px', color: '#7dff6a',
+    fontFamily: 'monospace', fontSize: '14px', color: '#00ff88',
   }).setOrigin(0.5);
   for (let r = 0; r < 3; r++) {
     for (let c = 0; c < 4; c++) {
-      scene.add.rectangle(70 + c * 40, 490 + r * 26, 30, 18, 0x8a8a92);
+      scene.add.rectangle(70 + c * 40, 490 + r * 26, 30, 18, 0x4a3a6a);
     }
   }
-  scene.add.rectangle(130, 566, 160, 12, 0x333338); // gaveta
+  scene.add.rectangle(130, 566, 160, 12, 0x16121e); // gaveta
 }
 
 function setShopVisible(scene, visible) {
@@ -1341,14 +1357,15 @@ function refreshUi(scene) {
   const s = scene.state;
   // HUD: corazones pixelados, monedas y marcador.
   for (let i = 0; i < MAX_HEARTS; i++) {
-    scene.ui.hearts[i].setTint(i < s.hearts ? 0xffffff : 0x333333);
+    scene.ui.hearts[i].setTint(i < s.hearts ? 0xffffff : 0x2a2038);
   }
   scene.ui.coinText.setText('$' + s.coins);
   scene.ui.hud.setText('DIA ' + s.day + '   Pts ' + s.score + '   Racha x' + s.streak);
-  const calcLabel = s.perks.calcLevel > 0
-    ? 'CALC ' + Math.round(CALC_PROBS[s.perks.calcLevel] * 100) + '%'
-    : 'sin calc';
-  scene.ui.perkHud.setText('PISTAS:' + s.perks.hints + ' (P1_2)  ' + calcLabel);
+  // Perks en el HUD: solo se muestran si el jugador los posee.
+  const perkParts = [];
+  if (s.perks.hints > 0) perkParts.push('PISTAS:' + s.perks.hints + ' (P1_2)');
+  if (s.perks.calcLevel > 0) perkParts.push('CALC ' + Math.round(CALC_PROBS[s.perks.calcLevel] * 100) + '%');
+  scene.ui.perkHud.setText(perkParts.join('   '));
   if (s.rates) {
     scene.ui.ratesTitle.setText('TASAS DEL DIA (Bs/$)');
     const lines = ['DOLAR  ' + fmtBs(s.rates.dolar)];
@@ -1452,7 +1469,7 @@ function updateGame(scene, s, delta, time) {
   }
   const frac = Math.max(0, s.patienceLeft / s.client.patienceMs);
   scene.ui.patienceBar.scaleX = frac; // origin (0,0.5): encoge de derecha a izquierda
-  scene.ui.patienceBar.fillColor = frac > 0.5 ? COLORS.patience : (frac > 0.25 ? 0xffa500 : 0xff4444);
+  scene.ui.patienceBar.fillColor = frac > 0.5 ? COLORS.patience : (frac > 0.25 ? 0xffe600 : 0xff2aa3);
   // Paciencia crítica: color rojo + parpadeo (redundancia, no solo color).
   scene.ui.patienceBar.setAlpha(frac < 0.25 ? (Math.floor(time / 150) % 2 === 0 ? 1 : 0.35) : 1);
 
