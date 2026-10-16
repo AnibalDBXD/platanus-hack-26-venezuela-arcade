@@ -413,7 +413,7 @@ function fmtBs(n) {
 
 /**
  * @typedef {{ hints: number, calcLevel: number }} PerkState
- * hints: cargas de pista (P1_2 elimina 2 opciones falsas).
+ * hints: cargas de pista (B2 elimina 2 opciones falsas).
  * calcLevel: 0 = sin calculadora; 1..4 = 20%/30%/40%/50% de probabilidad
  * de revelar el monto correcto al llegar un cliente.
  */
@@ -437,11 +437,11 @@ function calcPrice(perks) {
  */
 function getShopItems(perks, hearts) {
   const items = [
-    { id: 'hints', label: '3 Pistas (P1_2 elimina 2 falsas)', price: SHOP_PRICES.hints, disabled: false },
+    { id: 'hints', label: '3 Pistas (B2 elimina 2 falsas)', price: SHOP_PRICES.hints, disabled: false },
     {
       id: 'calc',
       label: perks.calcLevel === 0
-        ? 'Calculadora (P1_3: 20%)'
+        ? 'Calculadora (B3: 20%)'
         : 'Mejorar Calculadora a ' + Math.round(CALC_PROBS[perks.calcLevel + 1] * 100) + '%',
       price: calcPrice(perks),
       disabled: perks.calcLevel >= MAX_CALC_LEVEL,
@@ -833,7 +833,7 @@ function create() {
   scene.ui.cursor = scene.add.triangle(0, 0, 0, 0, 0, 18, 16, 9, COLORS.buttonHot);
 
   // Calculadora de escritorio (perk): cuerpo biselado sobre el mostrador,
-  // LCD que tipea la cuenta y tecla "=" roja. Clic en ella = P1_3.
+  // LCD que tipea la cuenta y tecla "=" roja. Clic en ella = B3.
   const cg = scene.add.graphics();
   cg.fillGradientStyle(0x3b2b5e, 0x3b2b5e, 0x180e2e, 0x180e2e, 1);
   cg.fillRoundedRect(648, 318, 148, 94, 10);
@@ -1063,9 +1063,9 @@ function showStartScreen(scene) {
     'A CUANTO EL DOLAR!\n(Bodega Tycoon)\n\n' +
     'Cobra en Bs. segun el metodo de pago.\n' +
     'Revisa el cartel de tasas del dia.\n\n' +
-    'Joystick: elegir boton   P1_1: cobrar\n' +
-    'P1_2: usar pista (si tienes)\n\n' +
-    '[ START1 o CLIC para abrir la bodega ]'
+    'Joystick: elegir boton   B1: cobrar\n' +
+    'B2: usar pista (si tienes)\n\n' +
+    '[ START o CLIC para abrir la bodega ]'
   );
 }
 
@@ -1206,7 +1206,7 @@ function renderShop(scene) {
     row.card.setFillStyle(selected ? COLORS.counter : COLORS.button);
     row.card.setStrokeStyle(selected ? 4 : 3, selected ? COLORS.buttonHot : COLORS.panelEdge);
   });
-  scene.ui.shop.help.setText('Joystick: elegir   P1_1: comprar   (o clic en la tarjeta)');
+  scene.ui.shop.help.setText('Joystick: elegir   B1: comprar   (o clic en la tarjeta)');
   scene.ui.shop.next.setText('CONTINUAR AL DIA ' + (s.day + 1));
 }
 
@@ -1239,7 +1239,7 @@ function useHint(scene) {
   refreshUi(scene);
 }
 
-/** Dispara la calculadora (P1_3 o clic): el LCD tipea la cuenta del cliente. */
+/** Dispara la calculadora (B3 o clic): el LCD tipea la cuenta del cliente. */
 function useCalc(scene) {
   const s = scene.state;
   if (s.phase !== 'play' || s.perks.calcLevel <= 0 || s.calcFull) return;
@@ -1306,8 +1306,8 @@ function refreshUi(scene) {
   scene.ui.hud.setText('DIA ' + s.day + '   Pts ' + s.score + '   Racha x' + s.streak + (s.cheat ? '   TRUCO' : ''));
   // Perks en el HUD: solo se muestran si el jugador los posee.
   const perkParts = [];
-  if (s.perks.hints > 0) perkParts.push('PISTAS:' + s.perks.hints + ' (P1_2)');
-  if (s.perks.calcLevel > 0) perkParts.push('CALC ' + Math.round(CALC_PROBS[s.perks.calcLevel] * 100) + '% (P1_3)');
+  if (s.perks.hints > 0) perkParts.push('PISTAS:' + s.perks.hints + ' (B2)');
+  if (s.perks.calcLevel > 0) perkParts.push('CALC ' + Math.round(CALC_PROBS[s.perks.calcLevel] * 100) + '% (B3)');
   scene.ui.perkHud.setText(perkParts.join('   '));
   if (s.rates) {
     scene.ui.ratesTitle.setText('TASAS DEL DIA (Bs/$)');
@@ -1339,9 +1339,9 @@ function refreshUi(scene) {
         btn.rect.setTexture('btnN' + i);
       }
     }
-    // LCD en reposo: invita a usar P1_3 o avisa que no hay pilas hoy.
+    // LCD en reposo: invita a usar B3 o avisa que no hay pilas hoy.
     if (s.perks.calcLevel > 0 && !s.calcFull) {
-      scene.ui.calcLcd.setText(s.calcReady ? 'P1_3: CALCULAR' : 'SIN PILAS :(');
+      scene.ui.calcLcd.setText(s.calcReady ? 'B3: CALCULAR' : 'SIN PILAS :(');
     }
   }
 }
@@ -1383,7 +1383,7 @@ function updateGame(scene, s, delta, time) {
     scene.ui.center.setText(
       'CERRO LA BODEGA\n\nLlegaste al dia ' + s.day +
       '\nPuntaje: ' + s.score + '   Dolares: $' + s.coins +
-      '\n\n[ START1 o CLIC para reabrir ]'
+      '\n\n[ START o CLIC para reabrir ]'
     );
     if (consumePressed('START1') || consumePressed('P1_1')) {
       setCenterVisible(scene, false);
